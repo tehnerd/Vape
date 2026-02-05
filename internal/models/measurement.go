@@ -13,14 +13,19 @@ const (
 	TypeHTTP       MeasurementType = "http"
 )
 
-type MeasurementStatus string
+type MeasurementStatusName string
 
 const (
-	StatusSpecified MeasurementStatus = "Specified"
-	StatusScheduled MeasurementStatus = "Scheduled"
-	StatusOngoing   MeasurementStatus = "Ongoing"
-	StatusStopped   MeasurementStatus = "Stopped"
+	StatusSpecified MeasurementStatusName = "Specified"
+	StatusScheduled MeasurementStatusName = "Scheduled"
+	StatusOngoing   MeasurementStatusName = "Ongoing"
+	StatusStopped   MeasurementStatusName = "Stopped"
 )
+
+type MeasurementStatus struct {
+	ID   int                   `json:"id"`
+	Name MeasurementStatusName `json:"name"`
+}
 
 type Measurement struct {
 	ID                int               `json:"id"`

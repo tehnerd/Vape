@@ -44,7 +44,7 @@ func (f *TableFormatter) formatMeasurements(measurements []models.Measurement, w
 			strconv.Itoa(m.ID),
 			string(m.Type),
 			m.Target,
-			string(m.Status),
+			string(m.Status.Name),
 			strconv.Itoa(m.ParticipantCount),
 			created,
 		})
@@ -68,7 +68,7 @@ func (f *TableFormatter) formatMeasurement(m *models.Measurement, writer io.Writ
 	fmt.Fprintf(writer, "ID:           %d\n", m.ID)
 	fmt.Fprintf(writer, "Type:         %s\n", m.Type)
 	fmt.Fprintf(writer, "Target:       %s\n", m.Target)
-	fmt.Fprintf(writer, "Status:       %s\n", m.Status)
+	fmt.Fprintf(writer, "Status:       %s\n", m.Status.Name)
 	fmt.Fprintf(writer, "AF:           %d\n", m.AF)
 	fmt.Fprintf(writer, "Description:  %s\n", m.Description)
 	fmt.Fprintf(writer, "One-off:      %t\n", m.IsOneoff)
@@ -183,6 +183,8 @@ func (f *TableFormatter) formatResults(results []models.MeasurementResult, write
 		return f.formatTracerouteResults(results, writer)
 	case "dns":
 		return f.formatDNSResults(results, writer)
+	case "sslcert":
+		return f.formatSSLResults(results, writer)
 	default:
 		return f.formatGenericResults(results, writer)
 	}
@@ -259,6 +261,33 @@ func (f *TableFormatter) formatDNSResults(results []models.MeasurementResult, wr
 	}
 
 	table.Render()
+	return nil
+}
+
+func (f *TableFormatter) formatSSLResults(results []models.MeasurementResult, writer io.Writer) error {
+	for i, r := range results {
+		if i > 0 {
+			fmt.Fprintln(writer, "---")
+		}
+		fmt.Fprintf(writer, "Probe %d (%s) -> %s\n", r.ProbeID, r.From, r.DstAddr)
+		if r.ServerCipher != "" {
+			fmt.Fprintln(writer, "  Cipher:     ", r.ServerCipher)
+		}
+		if r.TLSVersion != "" {
+			fmt.Fprintln(writer, "  TLS Version:", r.TLSVersion)
+		}
+		if r.RT > 0 {
+			fmt.Fprintf(writer, "  RT:          %.2f ms\n", r.RT)
+		}
+		if len(r.SSLCerts) == 0 {
+			fmt.Fprintln(writer, "  No certificate data")
+			continue
+		}
+		for j, cert := range r.SSLCerts {
+			raw := cert.Raw
+			fmt.Fprintf(writer, "  Cert[%d]:     %s\n", j, raw)
+		}
+	}
 	return nil
 }
 

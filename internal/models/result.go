@@ -1,5 +1,7 @@
 package models
 
+import "encoding/json"
+
 type MeasurementResult struct {
 	MsmID     int     `json:"msm_id"`
 	ProbeID   int     `json:"prb_id"`
@@ -23,18 +25,22 @@ type MeasurementResult struct {
 	Dup      int          `json:"dup,omitempty"`
 	TTL      int          `json:"ttl,omitempty"`
 	Size     int          `json:"size,omitempty"`
-	Results  []PingResult `json:"result,omitempty"`
+	Results  []PingResult `json:"-"`
 	// Traceroute specific
-	ParisID int                   `json:"paris_id,omitempty"`
-	Hops    []TracerouteHop       `json:"result,omitempty"`
+	ParisID int             `json:"paris_id,omitempty"`
+	Hops    []TracerouteHop `json:"-"`
 	// DNS specific
-	DNSResult *DNSResult           `json:"resultset,omitempty"`
+	DNSResult *DNSResult `json:"resultset,omitempty"`
 	// SSL specific
-	SSLResult *SSLResult           `json:"cert,omitempty"`
+	SSLCerts     []SSLCert `json:"cert,omitempty"`
+	ServerCipher string    `json:"server_cipher,omitempty"`
+	RT           float64   `json:"rt,omitempty"`
+	TLSVersion   string    `json:"ver,omitempty"`
+	TTC          float64   `json:"ttc,omitempty"`
 	// HTTP specific
-	HTTPResult *HTTPResult         `json:"result,omitempty"`
+	HTTPResult *HTTPResult `json:"-"`
 	// NTP specific
-	NTPResult *NTPResult          `json:"result,omitempty"`
+	NTPResult *NTPResult `json:"-"`
 }
 
 type ResultError struct {
@@ -88,15 +94,28 @@ type DNSError struct {
 	Message string `json:"message,omitempty"`
 }
 
-type SSLResult struct {
-	SubjectCN    string   `json:"subject_cn,omitempty"`
-	IssuerCN     string   `json:"issuer_cn,omitempty"`
-	NotBefore    string   `json:"not_before,omitempty"`
-	NotAfter     string   `json:"not_after,omitempty"`
-	SHA256       string   `json:"sha256fp,omitempty"`
-	SHA1         string   `json:"sha1fp,omitempty"`
-	CertChain    []string `json:"chain,omitempty"`
-	ServerCipher string   `json:"server_cipher,omitempty"`
+// SSLCert represents a single certificate in the chain.
+// The RIPE Atlas API returns cert as an array of PEM strings.
+type SSLCert struct {
+	Raw string
+}
+
+func (s *SSLCert) UnmarshalJSON(data []byte) error {
+	var raw string
+	if err := json.Unmarshal(data, &raw); err == nil {
+		s.Raw = raw
+		return nil
+	}
+	// Fallback: try as object with known fields
+	var obj struct {
+		SubjectCN string `json:"subject_cn"`
+		IssuerCN  string `json:"issuer_cn"`
+	}
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return err
+	}
+	s.Raw = obj.SubjectCN
+	return nil
 }
 
 type HTTPResult struct {
@@ -125,6 +144,39 @@ type NTPResult struct {
 	Li             string  `json:"li,omitempty"`
 	Mode           string  `json:"mode,omitempty"`
 	Error          string  `json:"error,omitempty"`
+}
+
+// UnmarshalJSON handles the polymorphic "result" field which maps to different
+// types depending on the measurement type (ping, traceroute, http, ntp).
+func (m *MeasurementResult) UnmarshalJSON(data []byte) error {
+	type Alias MeasurementResult
+	aux := &struct {
+		Result json.RawMessage `json:"result,omitempty"`
+		*Alias
+	}{
+		Alias: (*Alias)(m),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	if len(aux.Result) == 0 {
+		return nil
+	}
+
+	switch m.Type {
+	case "traceroute":
+		return json.Unmarshal(aux.Result, &m.Hops)
+	case "ping":
+		return json.Unmarshal(aux.Result, &m.Results)
+	case "http":
+		m.HTTPResult = &HTTPResult{}
+		return json.Unmarshal(aux.Result, m.HTTPResult)
+	case "ntp":
+		m.NTPResult = &NTPResult{}
+		return json.Unmarshal(aux.Result, m.NTPResult)
+	}
+	return nil
 }
 
 type ResultListResponse struct {
