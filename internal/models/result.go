@@ -48,11 +48,30 @@ type ResultError struct {
 	Message string `json:"message,omitempty"`
 }
 
+// TimeoutFlag represents the RIPE Atlas "x" field, which marks a lost packet or
+// hop timeout. The API encodes it as the string "*", though some result types
+// may use a JSON boolean, so both forms are accepted.
+type TimeoutFlag bool
+
+func (t *TimeoutFlag) UnmarshalJSON(data []byte) error {
+	var b bool
+	if err := json.Unmarshal(data, &b); err == nil {
+		*t = TimeoutFlag(b)
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	*t = TimeoutFlag(s != "")
+	return nil
+}
+
 type PingResult struct {
-	RTT     float64 `json:"rtt,omitempty"`
-	TTL     int     `json:"ttl,omitempty"`
-	Error   string  `json:"error,omitempty"`
-	Timeout bool    `json:"x,omitempty"`
+	RTT     float64     `json:"rtt,omitempty"`
+	TTL     int         `json:"ttl,omitempty"`
+	Error   string      `json:"error,omitempty"`
+	Timeout TimeoutFlag `json:"x,omitempty"`
 }
 
 type TracerouteHop struct {
@@ -65,9 +84,9 @@ type TracerouteRTT struct {
 	From    string  `json:"from,omitempty"`
 	TTL     int     `json:"ttl,omitempty"`
 	Size    int     `json:"size,omitempty"`
-	RTT     float64 `json:"rtt,omitempty"`
-	Error   string  `json:"err,omitempty"`
-	Timeout bool    `json:"x,omitempty"`
+	RTT     float64     `json:"rtt,omitempty"`
+	Error   string      `json:"err,omitempty"`
+	Timeout TimeoutFlag `json:"x,omitempty"`
 }
 
 type DNSResult struct {
