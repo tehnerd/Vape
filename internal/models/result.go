@@ -29,8 +29,9 @@ type MeasurementResult struct {
 	// Traceroute specific
 	ParisID int             `json:"paris_id,omitempty"`
 	Hops    []TracerouteHop `json:"-"`
-	// DNS specific
-	DNSResult *DNSResult `json:"resultset,omitempty"`
+	// DNS specific. One entry per queried resolver (the "resultset" array);
+	// a single-query response yields a single entry.
+	DNSResults []DNSResult `json:"-"`
 	// SSL specific
 	SSLCerts     []SSLCert `json:"cert,omitempty"`
 	ServerCipher string    `json:"server_cipher,omitempty"`
@@ -94,11 +95,52 @@ type DNSResult struct {
 	Size       int        `json:"size,omitempty"`
 	Abuf       string     `json:"abuf,omitempty"`
 	Answers    []DNSAnswer `json:"answers,omitempty"`
+	// AnCount mirrors the ANCOUNT header field of the DNS response. RIPE Atlas
+	// does not decode the answer section for us, so this is the count fallback
+	// when the abuf cannot be parsed.
+	AnCount    int        `json:"ANCOUNT,omitempty"`
 	NSID       string     `json:"nsid,omitempty"`
 	SubID      int        `json:"subid,omitempty"`
 	SubMax     int        `json:"submax,omitempty"`
 	DstAddr    string     `json:"dst_addr,omitempty"`
 	Error      *DNSError  `json:"error,omitempty"`
+}
+
+// decodeAbuf populates Answers from the base64-encoded abuf when the API did not
+// already provide a decoded answer section. Parse failures are ignored so a
+// malformed abuf doesn't drop the rest of the result.
+func (r *DNSResult) decodeAbuf() {
+	if len(r.Answers) > 0 || r.Abuf == "" {
+		return
+	}
+	if answers, err := parseAbuf(r.Abuf); err == nil {
+		r.Answers = answers
+	}
+}
+
+// dnsResultset represents a single entry of the DNS "resultset" array returned
+// by RIPE Atlas. The actual DNS answer payload (abuf, rt, answers, ...) is
+// nested under the "result" object, while the queried resolver and timing live
+// on the element itself.
+type dnsResultset struct {
+	Time    float64         `json:"time,omitempty"`
+	DstAddr string          `json:"dst_addr,omitempty"`
+	Result  json.RawMessage `json:"result,omitempty"`
+	Error   *DNSError       `json:"error,omitempty"`
+}
+
+func (d dnsResultset) toDNSResult() *DNSResult {
+	res := &DNSResult{Error: d.Error}
+	if len(d.Result) > 0 {
+		// Ignore inner parse errors so a malformed answer doesn't drop the
+		// whole result; the resolver/timing fields below are still useful.
+		_ = json.Unmarshal(d.Result, res)
+	}
+	if res.DstAddr == "" {
+		res.DstAddr = d.DstAddr
+	}
+	res.decodeAbuf()
+	return res
 }
 
 type DNSAnswer struct {
@@ -170,13 +212,42 @@ type NTPResult struct {
 func (m *MeasurementResult) UnmarshalJSON(data []byte) error {
 	type Alias MeasurementResult
 	aux := &struct {
-		Result json.RawMessage `json:"result,omitempty"`
+		Result    json.RawMessage `json:"result,omitempty"`
+		Resultset json.RawMessage `json:"resultset,omitempty"`
 		*Alias
 	}{
 		Alias: (*Alias)(m),
 	}
 	if err := json.Unmarshal(data, aux); err != nil {
 		return err
+	}
+
+	// DNS results come in two shapes: a "resultset" array (one entry per
+	// queried resolver) or, for a single query, a nested "result" object.
+	if m.Type == "dns" {
+		if len(aux.Resultset) > 0 {
+			var rs []dnsResultset
+			if err := json.Unmarshal(aux.Resultset, &rs); err != nil {
+				return err
+			}
+			m.DNSResults = make([]DNSResult, 0, len(rs))
+			for _, entry := range rs {
+				m.DNSResults = append(m.DNSResults, *entry.toDNSResult())
+			}
+			return nil
+		}
+		if len(aux.Result) > 0 {
+			res := DNSResult{}
+			if err := json.Unmarshal(aux.Result, &res); err != nil {
+				return err
+			}
+			if res.DstAddr == "" {
+				res.DstAddr = m.DstAddr
+			}
+			res.decodeAbuf()
+			m.DNSResults = []DNSResult{res}
+		}
+		return nil
 	}
 
 	if len(aux.Result) == 0 {

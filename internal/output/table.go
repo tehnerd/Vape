@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/olekukonko/tablewriter"
@@ -247,21 +248,36 @@ func (f *TableFormatter) formatDNSResults(results []models.MeasurementResult, wr
 	table.SetAlignment(tablewriter.ALIGN_LEFT)
 
 	for _, r := range results {
-		if r.DNSResult == nil {
-			continue
+		for _, dns := range r.DNSResults {
+			table.Append([]string{
+				strconv.Itoa(r.ProbeID),
+				r.From,
+				dns.DstAddr,
+				fmt.Sprintf("%.2f", dns.Time),
+				formatDNSAnswers(dns),
+			})
 		}
-		answerCount := len(r.DNSResult.Answers)
-		table.Append([]string{
-			strconv.Itoa(r.ProbeID),
-			r.From,
-			r.DNSResult.DstAddr,
-			fmt.Sprintf("%.2f", r.DNSResult.Time),
-			strconv.Itoa(answerCount),
-		})
 	}
 
 	table.Render()
 	return nil
+}
+
+// formatDNSAnswers renders the answer section as "<count>: <type> <rdata>, ...".
+// When the abuf could not be decoded it falls back to the ANCOUNT header value
+// so the column still reflects the real number of answer records.
+func formatDNSAnswers(dns models.DNSResult) string {
+	if dns.Error != nil {
+		return "ERROR"
+	}
+	if len(dns.Answers) == 0 {
+		return strconv.Itoa(dns.AnCount)
+	}
+	parts := make([]string, 0, len(dns.Answers))
+	for _, a := range dns.Answers {
+		parts = append(parts, fmt.Sprintf("%s %s", a.Type, a.Rdata))
+	}
+	return fmt.Sprintf("%d: %s", len(dns.Answers), strings.Join(parts, ", "))
 }
 
 func (f *TableFormatter) formatSSLResults(results []models.MeasurementResult, writer io.Writer) error {
