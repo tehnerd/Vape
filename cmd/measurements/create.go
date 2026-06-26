@@ -30,7 +30,8 @@ var (
 	createMethod string
 	createPath   string
 	// SSL/HTTP specific
-	createPort int
+	createPort     int
+	createHostname string
 )
 
 var createCmd = &cobra.Command{
@@ -42,7 +43,8 @@ Examples:
   vape measurements create --type ping --target google.com
   vape measurements create --type traceroute --target 8.8.8.8 --probes 20 --af 4
   vape measurements create --type dns --target 8.8.8.8 --query-argument example.com --query-type A
-  vape measurements create --type http --target example.com --port 443`,
+  vape measurements create --type http --target example.com --port 443
+  vape measurements create --type sslcert --target 1.2.3.4 --hostname example.com --port 443`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if createType == "" {
 			return fmt.Errorf("--type is required")
@@ -79,6 +81,7 @@ Examples:
 			if createPort > 0 {
 				definition.Port = createPort
 			}
+			definition.Hostname = createHostname
 		}
 
 		probeSpec := models.ProbeSpec{
@@ -133,6 +136,8 @@ func init() {
 	createCmd.Flags().StringVar(&createPath, "path", "/", "HTTP path")
 	// Port flag
 	createCmd.Flags().IntVar(&createPort, "port", 0, "Target port (for SSL/HTTP)")
+	// SSL flags
+	createCmd.Flags().StringVar(&createHostname, "hostname", "", "SNI server name for sslcert (sent in TLS handshake; --target is the connect IP/host)")
 
 	createCmd.MarkFlagRequired("type")
 }

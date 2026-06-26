@@ -12,10 +12,11 @@ import (
 )
 
 var (
-	resultsStart    int64
-	resultsStop     int64
-	resultsProbeIDs string
-	resultsLimit    int
+	resultsStart      int64
+	resultsStop       int64
+	resultsProbeIDs   string
+	resultsLimit      int
+	resultsCertFormat string
 )
 
 var resultsCmd = &cobra.Command{
@@ -57,6 +58,9 @@ Examples:
 		}
 
 		formatter := output.GetFormatter()
+		if tf, ok := formatter.(*output.TableFormatter); ok {
+			tf.SSLCertMode = output.ParseSSLCertMode(resultsCertFormat)
+		}
 		return formatter.Format(results, os.Stdout)
 	},
 }
@@ -66,4 +70,5 @@ func init() {
 	resultsCmd.Flags().Int64Var(&resultsStop, "stop", 0, "Stop timestamp (Unix epoch)")
 	resultsCmd.Flags().StringVar(&resultsProbeIDs, "probe-ids", "", "Comma-separated list of probe IDs")
 	resultsCmd.Flags().IntVar(&resultsLimit, "limit", 0, "Maximum number of results")
+	resultsCmd.Flags().StringVar(&resultsCertFormat, "cert-format", "names", "SSL cert output: 'names' (SAN + cert names) or 'full' (base64 + decoded)")
 }

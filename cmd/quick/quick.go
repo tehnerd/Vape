@@ -19,6 +19,7 @@ var (
 	quickProbeValue string
 	quickWait       bool
 	quickTimeout    int
+	quickCertFormat string
 )
 
 var QuickCmd = &cobra.Command{
@@ -42,6 +43,7 @@ func init() {
 	QuickCmd.PersistentFlags().StringVar(&quickProbeValue, "probe-value", "WW", "Probe selection value")
 	QuickCmd.PersistentFlags().BoolVar(&quickWait, "wait", false, "Wait for results")
 	QuickCmd.PersistentFlags().IntVar(&quickTimeout, "timeout", 120, "Timeout in seconds when waiting for results")
+	QuickCmd.PersistentFlags().StringVar(&quickCertFormat, "cert-format", "names", "SSL cert output: 'names' (SAN + cert names) or 'full' (base64 + decoded)")
 
 	QuickCmd.AddCommand(pingCmd)
 	QuickCmd.AddCommand(tracerouteCmd)
@@ -118,6 +120,9 @@ func waitForResults(client *api.Client, msmID int) error {
 			if len(results) > 0 {
 				fmt.Printf("\nReceived %d results:\n\n", len(results))
 				formatter := output.GetFormatter()
+				if tf, ok := formatter.(*output.TableFormatter); ok {
+					tf.SSLCertMode = output.ParseSSLCertMode(quickCertFormat)
+				}
 				return formatter.Format(results, os.Stdout)
 			}
 

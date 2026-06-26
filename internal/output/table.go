@@ -11,7 +11,11 @@ import (
 	"github.com/tehnerd/vape/internal/models"
 )
 
-type TableFormatter struct{}
+type TableFormatter struct {
+	// SSLCertMode controls how sslcert certificates are rendered.
+	// The zero value (SSLCertNames) prints only certificate names and SANs.
+	SSLCertMode SSLCertMode
+}
 
 func (f *TableFormatter) Format(data interface{}, writer io.Writer) error {
 	switch v := data.(type) {
@@ -300,8 +304,7 @@ func (f *TableFormatter) formatSSLResults(results []models.MeasurementResult, wr
 			continue
 		}
 		for j, cert := range r.SSLCerts {
-			raw := cert.Raw
-			fmt.Fprintf(writer, "  Cert[%d]:     %s\n", j, raw)
+			formatSSLCert(writer, j, cert.Raw, f.SSLCertMode)
 		}
 	}
 	return nil

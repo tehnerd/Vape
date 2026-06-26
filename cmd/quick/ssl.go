@@ -7,7 +7,10 @@ import (
 	"github.com/tehnerd/vape/internal/models"
 )
 
-var sslPort int
+var (
+	sslPort     int
+	sslHostname string
+)
 
 var sslCmd = &cobra.Command{
 	Use:     "ssl <target>",
@@ -18,6 +21,7 @@ var sslCmd = &cobra.Command{
 Examples:
   vape quick ssl example.com
   vape quick ssl example.com --port 8443
+  vape quick ssl 1.2.3.4 --hostname example.com
   vape quick cert google.com --wait`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -28,10 +32,12 @@ Examples:
 			if sslPort > 0 {
 				def.Port = sslPort
 			}
+			def.Hostname = sslHostname
 		})
 	},
 }
 
 func init() {
 	sslCmd.Flags().IntVar(&sslPort, "port", 443, "Target port")
+	sslCmd.Flags().StringVar(&sslHostname, "hostname", "", "SNI server name sent in TLS handshake (target is the connect IP/host)")
 }

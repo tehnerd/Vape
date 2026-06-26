@@ -91,6 +91,7 @@ type MeasurementDefinition struct {
 	HeaderBytes     int    `json:"header_bytes,omitempty"`
 	// SSL specific
 	Port            int    `json:"port,omitempty"`
+	Hostname        string `json:"hostname,omitempty"` // SNI server name for sslcert/http
 }
 
 type ProbeSpec struct {
